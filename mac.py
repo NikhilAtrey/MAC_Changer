@@ -1,38 +1,47 @@
 import subprocess
 import re
-# ifconfig eth0 down
-# ifconfig eth0 hw ether 00:11:22:33:44:55
-# ifconfig eth0 up
+import random
 
-class MAC_Changer:
-    def __init__(self):
-        self.MAC = ""
+def random_mac():
+    """Generate a random MAC address with a fixed OUI (Organizationally Unique Identifier)."""
+    oui = "00:16:3e"  # Fixed OUI
+    random_bytes = [random.randint(0x00, 0x7f) for _ in range(3)]  # Random bytes
+    random_mac_address = oui + ":{:02x}:{:02x}:{:02x}".format(*random_bytes)
+    return random_mac_address
 
-    def get_MAC(self, iface):
-        output = subprocess.run(["ifconfig", iface], shell=False, capture_output=True)
-        cmd_result = output.stdout.decode('utf-8')
-        # print(cmd_result)
 
-        pattern = r'ether\s[\da-z]{2}:[\da-z]{2}:[\da-z]{2}:[\da-z]{2}:[\da-z]{2}:[\da-z]{2}'
-        regex = re.compile(pattern)
-        ans = regex.search(cmd_result)
-        current_mac = ans.group().split(" ")[1]
-        self.MAC = current_mac
-        return current_mac
+def change_mac(interface, new_mac):
+    print(f"[+] Changing MAC Address for {interface} to {new_mac}")
+    subprocess.call(["ifconfig", interface, "down"])
+    subprocess.call(["ifconfig", interface, "hw", "ether", new_mac])
+    subprocess.call(["ifconfig", interface, "up"])
+
+
+def get_current_mac(interface):
+    ifconfig_result = subprocess.check_output(["ifconfig", interface])
+    ifconfig_result = ifconfig_result.decode("utf-8")
+    mac_address_search_result = re.search(r"\w\w:\w\w:\w\w:\w\w:\w\w:\w\w", ifconfig_result)
     
-    def change_mac(self,iface,new_mac):
-        # print("[+] Current MAC Address is " , self.get_MAC(iface))
-        output = subprocess.run(["ifconfig", iface , "down"], shell=False, capture_output=True)
-        print(output.stderr.decode('utf-8'))
+    if mac_address_search_result:
+        return mac_address_search_result.group(0)
+    else:
+        print("[-] Could not read the MAC address.")
+        return None
 
-        # ifconfig eth0 hw ether 00:11:22:33:44:55
-        output = subprocess.run(["ifconfig", iface , "hw","ether",new_mac], shell=False, capture_output=True)
-        print(output.stderr.decode('utf-8'))
 
-        # ifconfig eth0 up
-        output = subprocess.run(["ifconfig", iface , "up"], shell=False, capture_output=True)
-        print(output.stderr.decode('utf-8'))
+def save_original_mac(interface):
+    original_mac = get_current_mac(interface)
+    if original_mac:
+        with open(f"{interface}_original_mac.txt", "w") as file:
+            file.write(original_mac)
+        print(f"[+] Saved original MAC address: {original_mac}")
 
-        # print("[+] Updated MAC Address is ", self.get_MAC(iface))
 
-        return self.get_MAC(iface)
+def load_original_mac(interface):
+    try:
+        with open(f"{interface}_original_mac.txt", "r") as file:
+            original_mac = file.read().strip()
+        return original_mac
+    except FileNotFoundError:
+        print(f"[-] No original MAC address found for {interface}")
+        return None
